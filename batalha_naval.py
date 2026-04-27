@@ -1,299 +1,217 @@
 """
-Jogo de Batalha Naval em Python
-Modo: 2 Jogadores Human vs Human
+BATALHA NAVAL - Usando Matrizes (listas 10x10)
+
+MATRIZ DO JOGO:
+  '.' = agua
+  'N' = navio (oculto ao jogador)
+  'X' = acerto
+  'O' = erro (agua)
+
+NAVIOS:
+  Porta-avioes (5), Cruzador (4), Destroyer (3), Submarino (2)
+
+PONTUACAO:
+  Acerto:  +100 pontos
+  Erro:    -10 pontos
+  Vitoria: +500 bonus
 """
 
 import random
-from typing import List, Tuple
-from enum import Enum
+import os
+
+TAMANHO = 10
+ARQUIVO_RANKING = "ranking.txt"
+
+NAVIOS = [
+    ("Porta-avioes", 5),
+    ("Cruzador",     4),
+    ("Destroyer",    3),
+    ("Submarino",    2),
+]
 
 
-class CelulaTipo(Enum):
-    AGUA = '~'
-    NAVIO = 'N'
-    ACERTO = 'X'
-    ERRO = 'O'
+# ── Matrizes ──────────────────────────────────────
+
+def criar_tabuleiro():
+    return [['.' ] * TAMANHO for _ in range(TAMANHO)]
 
 
-class Direcao(Enum):
-    HORIZONTAL = 0
-    VERTICAL = 1
+def posicionar_navios(tabuleiro):
+    navios_info = []
+    for nome, tamanho in NAVIOS:
+        posicionado = False
+        while not posicionado:
+            direcao = random.choice(['H', 'V'])
+            if direcao == 'H':
+                r = random.randint(0, TAMANHO - 1)
+                c = random.randint(0, TAMANHO - tamanho)
+                celulas = [(r, c + i) for i in range(tamanho)]
+            else:
+                r = random.randint(0, TAMANHO - tamanho)
+                c = random.randint(0, TAMANHO - 1)
+                celulas = [(r + i, c) for i in range(tamanho)]
+
+            if all(tabuleiro[r][c] == '.' for r, c in celulas):
+                for r, c in celulas:
+                    tabuleiro[r][c] = 'N'
+                navios_info.append({"nome": nome, "celulas": set(celulas), "hits": set()})
+                posicionado = True
+    return navios_info
 
 
-class Tabuleiro:
-    """Classe para gerenciar o tabuleiro do jogo"""
-    
-    def __init__(self, tamanho: int = 10):
-        self.tamanho = tamanho
-        self.grid = [[CelulaTipo.AGUA for _ in range(tamanho)] for _ in range(tamanho)]
-        self.navios = []
-        
-    def pode_colocar_navio(self, linha: int, coluna: int, tamanho: int, direcao: Direcao) -> bool:
-        """Verifica se é possível colocar um navio"""
-        if direcao == Direcao.HORIZONTAL:
-            if coluna + tamanho > self.tamanho:
-                return False
-            for c in range(coluna, coluna + tamanho):
-                if self.grid[linha][c] != CelulaTipo.AGUA:
-                    return False
-                # Verifica células adjacentes
-                for adj_l in range(max(0, linha - 1), min(self.tamanho, linha + 2)):
-                    for adj_c in range(max(0, c - 1), min(self.tamanho, c + 2)):
-                        if (adj_l, adj_c) != (linha, c) and self.grid[adj_l][adj_c] == CelulaTipo.NAVIO:
-                            return False
-        else:  # VERTICAL
-            if linha + tamanho > self.tamanho:
-                return False
-            for l in range(linha, linha + tamanho):
-                if self.grid[l][coluna] != CelulaTipo.AGUA:
-                    return False
-                # Verifica células adjacentes
-                for adj_l in range(max(0, l - 1), min(self.tamanho, l + 2)):
-                    for adj_c in range(max(0, coluna - 1), min(self.tamanho, coluna + 2)):
-                        if (adj_l, adj_c) != (l, coluna) and self.grid[adj_l][adj_c] == CelulaTipo.NAVIO:
-                            return False
-        return True
-    
-    def colocar_navio(self, linha: int, coluna: int, tamanho: int, direcao: Direcao) -> bool:
-        """Coloca um navio no tabuleiro"""
-        if not self.pode_colocar_navio(linha, coluna, tamanho, direcao):
-            return False
-        
-        posicoes = []
-        if direcao == Direcao.HORIZONTAL:
-            for c in range(coluna, coluna + tamanho):
-                self.grid[linha][c] = CelulaTipo.NAVIO
-                posicoes.append((linha, c))
-        else:  # VERTICAL
-            for l in range(linha, linha + tamanho):
-                self.grid[l][coluna] = CelulaTipo.NAVIO
-                posicoes.append((l, coluna))
-        
-        self.navios.append(Navio(tamanho, posicoes))
-        return True
-    
-    def receber_ataque(self, linha: int, coluna: int) -> str:
-        """Recebe um ataque e retorna o resultado"""
-        if linha < 0 or linha >= self.tamanho or coluna < 0 or coluna >= self.tamanho:
-            return "FORA"
-        
-        celula = self.grid[linha][coluna]
-        
-        if celula == CelulaTipo.ACERTO or celula == CelulaTipo.ERRO:
-            return "JA_ATACADO"
-        
-        if celula == CelulaTipo.NAVIO:
-            self.grid[linha][coluna] = CelulaTipo.ACERTO
-            # Marca o navio como atingido
-            for navio in self.navios:
-                if (linha, coluna) in navio.posicoes:
-                    navio.acertos += 1
-                    if navio.acertos == navio.tamanho:
-                        return "AFUNDADO"
-            return "ACERTO"
-        else:
-            self.grid[linha][coluna] = CelulaTipo.ERRO
-            return "ERRO"
-    
-    def exibir(self, revelar_navios: bool = False) -> None:
-        """Exibe o tabuleiro"""
-        print("\n  ", end="")
-        for i in range(self.tamanho):
-            print(f"{i:2}", end=" ")
-        print()
-        
-        for i, linha in enumerate(self.grid):
-            print(f"{i:2}", end=" ")
-            for j, celula in enumerate(linha):
-                if revelar_navios and celula == CelulaTipo.NAVIO:
-                    print(f"{celula.value:2}", end=" ")
-                elif celula in [CelulaTipo.ACERTO, CelulaTipo.ERRO]:
-                    print(f"{celula.value:2}", end=" ")
-                else:
-                    print(f"{celula.value:2}", end=" ")
-            print()
-    
-    def exibir_publico(self) -> None:
-        """Exibe o tabuleiro sem revelar a posição dos navios"""
-        print("\n  ", end="")
-        for i in range(self.tamanho):
-            print(f"{i:2}", end=" ")
-        print()
-        
-        for i, linha in enumerate(self.grid):
-            print(f"{i:2}", end=" ")
-            for celula in linha:
-                if celula in [CelulaTipo.ACERTO, CelulaTipo.ERRO]:
-                    print(f"{celula.value:2}", end=" ")
-                else:
-                    print(" ~ ", end=" ")
-            print()
-    
-    def todos_navios_afundados(self) -> bool:
-        """Verifica se todos os navios foram afundados"""
-        return all(navio.acertos == navio.tamanho for navio in self.navios)
+# ── Exibicao ─────────────────────────────────────
+
+def exibir_tabuleiro(tabuleiro, revelar=False):
+    print("   " + "  ".join(str(i + 1).rjust(2) for i in range(TAMANHO)))
+    for i, linha in enumerate(tabuleiro):
+        letra = chr(ord('A') + i)
+        celulas = []
+        for c in linha:
+            if c == 'X':
+                celulas.append(' X')
+            elif c == 'O':
+                celulas.append(' o')
+            elif c == 'N' and revelar:
+                celulas.append(' #')
+            else:
+                celulas.append(' .')
+        print(f"{letra}  {'  '.join(celulas)}")
 
 
-class Navio:
-    """Classe para representar um navio"""
-    
-    def __init__(self, tamanho: int, posicoes: List[Tuple[int, int]]):
-        self.tamanho = tamanho
-        self.posicoes = posicoes
-        self.acertos = 0
+# ── Ataque ────────────────────────────────────────
+
+def atacar(tabuleiro, navios_info, linha, col):
+    celula = tabuleiro[linha][col]
+    if celula in ('X', 'O'):
+        return 'ja_atacado', None
+    if celula == 'N':
+        tabuleiro[linha][col] = 'X'
+        for navio in navios_info:
+            if (linha, col) in navio["celulas"]:
+                navio["hits"].add((linha, col))
+                if navio["hits"] == navio["celulas"]:
+                    return 'afundou', navio["nome"]
+        return 'acerto', None
+    tabuleiro[linha][col] = 'O'
+    return 'erro', None
 
 
-class Jogador:
-    """Classe para representar um jogador"""
-    
-    def __init__(self, nome: str):
-        self.nome = nome
-        self.tabuleiro_proprio = Tabuleiro()
-        self.tabuleiro_inimigo = Tabuleiro()
-        self.tabuleiro_inimigo.grid = [[CelulaTipo.AGUA for _ in range(10)] for _ in range(10)]
-    
-    def configurar_navios(self) -> None:
-        """Permite que o jogador configure seus navios"""
-        tamanhos_navios = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
-        
-        print(f"\n{'='*40}")
-        print(f"Configuração de Navios - {self.nome}")
-        print(f"{'='*40}")
-        
-        for i, tamanho in enumerate(tamanhos_navios, 1):
-            navios_colocados = False
-            while not navios_colocados:
-                self.tabuleiro_proprio.exibir(revelar_navios=True)
-                print(f"\nNavio {i}/{len(tamanhos_navios)} - Tamanho: {tamanho}")
-                
+def todos_afundados(navios_info):
+    return all(n["hits"] == n["celulas"] for n in navios_info)
+
+
+def parse_posicao(entrada):
+    entrada = entrada.strip().upper()
+    if len(entrada) < 2:
+        return None
+    letra = entrada[0]
+    if letra not in "ABCDEFGHIJ":
+        return None
+    try:
+        col = int(entrada[1:]) - 1
+    except ValueError:
+        return None
+    if not (0 <= col < TAMANHO):
+        return None
+    return ord(letra) - ord('A'), col
+
+
+# ── Ranking ───────────────────────────────────────
+
+def salvar_pontuacao(nome, pontuacao, venceu):
+    resultado = "VITORIA" if venceu else "DERROTA"
+    with open(ARQUIVO_RANKING, "a", encoding="utf-8") as f:
+        f.write(f"{pontuacao} | {resultado} | {nome}\n")
+
+
+def exibir_ranking():
+    print("\n=== RANKING ===")
+    if not os.path.exists(ARQUIVO_RANKING):
+        print("Nenhuma partida registrada.")
+        return
+    entradas = []
+    with open(ARQUIVO_RANKING, "r", encoding="utf-8") as f:
+        for linha in f:
+            partes = [p.strip() for p in linha.strip().split("|")]
+            if len(partes) == 3:
                 try:
-                    coluna = int(input("Coluna (0-9): "))
-                    linha = int(input("Linha (0-9): "))
-                    direcao_input = input("Direção (h=horizontal, v=vertical): ").lower()
-                    
-                    direcao = Direcao.HORIZONTAL if direcao_input == 'h' else Direcao.VERTICAL
-                    
-                    if self.tabuleiro_proprio.colocar_navio(linha, coluna, tamanho, direcao):
-                        navios_colocados = True
-                    else:
-                        print("❌ Posição inválida! Tente novamente.")
-                except (ValueError, IndexError):
-                    print("❌ Entrada inválida! Use números entre 0-9.")
-        
-        print(f"\n✓ Navios configurados com sucesso para {self.nome}!")
-    
-    def fazer_ataque(self, tabuleiro_inimigo: Tabuleiro) -> str:
-        """Faz um ataque no tabuleiro do inimigo"""
-        ataque_valido = False
-        while not ataque_valido:
-            try:
-                coluna = int(input(f"\n{self.nome}, informe coluna (0-9): "))
-                linha = int(input(f"{self.nome}, informe linha (0-9): "))
-                resultado = tabuleiro_inimigo.receber_ataque(linha, coluna)
-                
-                if resultado == "FORA":
-                    print("❌ Coordenadas fora do tabuleiro!")
-                    continue
-                elif resultado == "JA_ATACADO":
-                    print("❌ Já foi disparado nesse local!")
-                    continue
-                else:
-                    ataque_valido = True
-                    return resultado, linha, coluna
-            except ValueError:
-                print("❌ Entrada inválida! Use números entre 0-9.")
-    
-    def exibir_status_ataque(self, resultado: str, linha: int, coluna: int) -> None:
-        """Exibe o resultado do ataque"""
-        if resultado == "ACERTO":
-            print(f"🎯 ACERTO em ({linha}, {coluna})!")
-        elif resultado == "ERRO":
-            print(f"💧 Água em ({linha}, {coluna})")
-        elif resultado == "AFUNDADO":
-            print(f"⚓ NAVIO AFUNDADO em ({linha}, {coluna})!")
+                    entradas.append((int(partes[0]), partes[1], partes[2]))
+                except ValueError:
+                    pass
+    entradas.sort(reverse=True)
+    for pos, (pts, res, nome) in enumerate(entradas[:10], 1):
+        print(f"  {pos}. {nome:<20} {pts:>6} pts  ({res})")
+    print()
 
 
-class BatalhaNaval:
-    """Classe principal do jogo"""
-    
-    def __init__(self):
-        self.jogador1 = None
-        self.jogador2 = None
-        self.rodada = 0
-    
-    def inicializar_jogo(self) -> None:
-        """Inicializa o jogo"""
-        print("\n" + "="*50)
-        print("     BEM-VINDO A BATALHA NAVAL!")
-        print("="*50)
-        
-        nome1 = input("\nDigite o nome do Jogador 1: ").strip()
-        nome2 = input("Digite o nome do Jogador 2: ").strip()
-        
-        self.jogador1 = Jogador(nome1)
-        self.jogador2 = Jogador(nome2)
-    
-    def configurar_jogo(self) -> None:
-        """Configura os navios dos jogadores"""
-        input("\n✓ Pressione ENTER para começar a configuração dos navios...")
-        self.jogador1.configurar_navios()
-        
-        input("\n✓ Pressione ENTER para o próximo jogador...")
-        self.jogador2.configurar_navios()
-    
-    def exibir_turno(self, jogador_atacante: Jogador, jogador_defensor: Jogador) -> None:
-        """Exibe a situação do turno"""
-        print("\n" + "="*50)
-        print(f"TURNO DE {jogador_atacante.nome}")
-        print("="*50)
-        print(f"\nTabuleiro do {jogador_defensor.nome} (linha de fogo):")
-        jogador_defensor.tabuleiro_proprio.exibir_publico()
-        print(f"\nSeu tabuleiro ({jogador_atacante.nome}):")
-        jogador_atacante.tabuleiro_proprio.exibir()
-    
-    def jogar(self) -> None:
-        """Executa o loop principal do jogo"""
-        self.inicializar_jogo()
-        self.configurar_jogo()
-        
-        print("\n" + "="*50)
-        print("           COMEÇANDO O JOGO!")
-        print("="*50)
-        
-        while True:
-            # Turno do Jogador 1
-            self.exibir_turno(self.jogador1, self.jogador2)
-            resultado, linha, coluna = self.jogador1.fazer_ataque(self.jogador2.tabuleiro_proprio)
-            self.jogador1.exibir_status_ataque(resultado, linha, coluna)
-            
-            if self.jogador2.tabuleiro_proprio.todos_navios_afundados():
-                print(f"\n{'='*50}")
-                print(f"🏆 {self.jogador1.nome} VENCEU! 🏆")
-                print(f"{'='*50}")
-                break
-            
-            input("\nPressione ENTER para o próximo turno...")
-            
-            # Turno do Jogador 2
-            self.exibir_turno(self.jogador2, self.jogador1)
-            resultado, linha, coluna = self.jogador2.fazer_ataque(self.jogador1.tabuleiro_proprio)
-            self.jogador2.exibir_status_ataque(resultado, linha, coluna)
-            
-            if self.jogador1.tabuleiro_proprio.todos_navios_afundados():
-                print(f"\n{'='*50}")
-                print(f"🏆 {self.jogador2.nome} VENCEU! 🏆")
-                print(f"{'='*50}")
-                break
-            
-            input("\nPressione ENTER para o próximo turno...")
+# ── Jogo ──────────────────────────────────────────
 
+def jogar(nome):
+    tabuleiro = criar_tabuleiro()
+    navios    = posicionar_navios(tabuleiro)
+    pontuacao = 0
+    turno     = 1
+
+    print("\nNavios posicionados! Boa sorte!\n")
+
+    while True:
+        print(f"\n--- Turno {turno} | Pontuacao: {pontuacao} ---")
+        exibir_tabuleiro(tabuleiro, revelar=False)
+
+        entrada = input("Ataque (ex: B5): ").strip()
+        pos = parse_posicao(entrada)
+        if pos is None:
+            print("Posicao invalida. Use letra A-J + numero 1-10.")
+            continue
+
+        linha, col = pos
+        resultado, afundou = atacar(tabuleiro, navios, linha, col)
+
+        if resultado == 'ja_atacado':
+            print("Voce ja atacou essa posicao!")
+            continue
+        elif resultado == 'acerto':
+            pontuacao += 100
+            print(f"ACERTO! +100 pontos. Total: {pontuacao}")
+        elif resultado == 'afundou':
+            pontuacao += 300
+            print(f"AFUNDOU o {afundou}! +300 pontos. Total: {pontuacao}")
+        elif resultado == 'erro':
+            pontuacao -= 10
+            print(f"Agua... -10 pontos. Total: {pontuacao}")
+
+        if todos_afundados(navios):
+            pontuacao += 500
+            print(f"\nPARABENS {nome}! Voce destruiu toda a frota!")
+            print(f"Pontuacao final: {pontuacao}")
+            exibir_tabuleiro(tabuleiro, revelar=True)
+            salvar_pontuacao(nome, pontuacao, venceu=True)
+            return
+
+        turno += 1
+
+
+# ── Menu principal ────────────────────────────────
 
 def main():
-    """Função principal"""
-    jogo = BatalhaNaval()
-    jogo.jogar()
-    
-    print("\nObrigado por jogar Batalha Naval!")
+    print("=== BATALHA NAVAL ===")
+    nome = input("Digite seu nome: ").strip() or "Anonimo"
+
+    while True:
+        print("\n[1] Jogar")
+        print("[2] Ver Ranking")
+        print("[0] Sair")
+        escolha = input("Escolha: ").strip()
+
+        if escolha == '1':
+            jogar(nome)
+        elif escolha == '2':
+            exibir_ranking()
+        elif escolha == '0':
+            print("Ate logo!")
+            break
+        else:
+            print("Opcao invalida.")
 
 
 if __name__ == "__main__":
