@@ -1,218 +1,192 @@
-"""
-BATALHA NAVAL - Usando Matrizes (listas 10x10)
-
-MATRIZ DO JOGO:
-  '.' = agua
-  'N' = navio (oculto ao jogador)
-  'X' = acerto
-  'O' = erro (agua)
-
-NAVIOS:
-  Porta-avioes (5), Cruzador (4), Destroyer (3), Submarino (2)
-
-PONTUACAO:
-  Acerto:  +100 pontos
-  Erro:    -10 pontos
-  Vitoria: +500 bonus
-"""
-
 import random
-import os
+import time
 
-TAMANHO = 10
-ARQUIVO_RANKING = "ranking.txt"
+tabuleiro_jogador = [['🌊'] * 9 for _ in range(9)]
+tabuleiro_bot = [['🌊'] * 9 for _ in range(9)]
+exibir_computador = [['🌊'] * 9 for _ in range(9)]
+exibir_jogador = [['🌊'] * 9 for _ in range(9)]
 
-NAVIOS = [
-    ("Porta-avioes", 5),
-    ("Cruzador",     4),
-    ("Destroyer",    3),
-    ("Submarino",    2),
-]
+estado = {
+    'restante_jogador': 5,
+    'restante_bot': 5,
+}
+
+def limpar_tabuleiros():
+    global tabuleiro_jogador, tabuleiro_bot, exibir_computador, exibir_jogador, estado
+    tabuleiro_jogador = [['🌊'] * 9 for _ in range(9)]
+    tabuleiro_bot = [['🌊'] * 9 for _ in range(9)]
+    exibir_computador = [['🌊'] * 9 for _ in range(9)]
+    exibir_jogador = [['🌊'] * 9 for _ in range(9)]
+    estado = {
+        'restante_jogador': 5,
+        'restante_bot': 5,
+    }
+
+print(' ')
+print('Jogo Batalha Naval')
+print(' ')
+
+def menu():
+    print('1. Começar o jogo')
+    print('2. Regras')
+    print('3. Sair')
+    escolha = input('Digite uma opção: ')
+    print()
+
+    if escolha == '1':
+        limpar_tabuleiros()
+        posicao()
+        posicao_bot()
+        while True:
+            tabuleiro_lado(tabuleiro_jogador, exibir_computador, ocultar_tab2=True)
+            ataque(estado)
+            if verificar_vitoria(estado):
+                break
+            time.sleep(0.5)
+            ataque_bot(estado)
+            tabuleiro_lado(exibir_jogador, exibir_computador, ocultar_tab2=True)
+            if verificar_vitoria(estado):
+                break
+        print('Fim do jogo.')
+
+    elif escolha == '2':
+        print('Regras do Jogo:')
+        print('1. O objetivo do jogo é afundar os navios do oponente.')
+        print('2. Cada jogador tem um tabuleiro de 9x9.')
+        print('3. Os jogadores se revezam para atacar.')
+        print('4. O primeiro a destruir todos os navios vence.')
+
+    elif escolha == '3':
+        print('Saindo do jogo...')
+
+    else:
+        print('Opção inválida. Por favor, escolha uma opção válida.')
 
 
-# ── Matrizes ──────────────────────────────────────
-
-def criar_tabuleiro():
-    return [['.' ] * TAMANHO for _ in range(TAMANHO)]
-
-
-def posicionar_navios(tabuleiro):
-    navios_info = []
-    for nome, tamanho in NAVIOS:
-        posicionado = False
-        while not posicionado:
-            direcao = random.choice(['H', 'V'])
-            if direcao == 'H':
-                r = random.randint(0, TAMANHO - 1)
-                c = random.randint(0, TAMANHO - tamanho)
-                celulas = [(r, c + i) for i in range(tamanho)]
-            else:
-                r = random.randint(0, TAMANHO - tamanho)
-                c = random.randint(0, TAMANHO - 1)
-                celulas = [(r + i, c) for i in range(tamanho)]
-
-            if all(tabuleiro[r][c] == '.' for r, c in celulas):
-                for r, c in celulas:
-                    tabuleiro[r][c] = 'N'
-                navios_info.append({"nome": nome, "celulas": set(celulas), "hits": set()})
-                posicionado = True
-    return navios_info
-
-
-# ── Exibicao ─────────────────────────────────────
-
-def exibir_tabuleiro(tabuleiro, revelar=False):
-    print("   " + "  ".join(str(i + 1).rjust(2) for i in range(TAMANHO)))
+def exibir_tabuleiro(tabuleiro, ocultar=False):
+    print("   " + " ".join(f"{i:2}" for i in range(9)))
     for i, linha in enumerate(tabuleiro):
-        letra = chr(ord('A') + i)
-        celulas = []
-        for c in linha:
-            if c == 'X':
-                celulas.append(' X')
-            elif c == 'O':
-                celulas.append(' o')
-            elif c == 'N' and revelar:
-                celulas.append(' #')
-            else:
-                celulas.append(' .')
-        print(f"{letra}  {'  '.join(celulas)}")
-
-
-# ── Ataque ────────────────────────────────────────
-
-def atacar(tabuleiro, navios_info, linha, col):
-    celula = tabuleiro[linha][col]
-    if celula in ('X', 'O'):
-        return 'ja_atacado', None
-    if celula == 'N':
-        tabuleiro[linha][col] = 'X'
-        for navio in navios_info:
-            if (linha, col) in navio["celulas"]:
-                navio["hits"].add((linha, col))
-                if navio["hits"] == navio["celulas"]:
-                    return 'afundou', navio["nome"]
-        return 'acerto', None
-    tabuleiro[linha][col] = 'O'
-    return 'erro', None
-
-
-def todos_afundados(navios_info):
-    return all(n["hits"] == n["celulas"] for n in navios_info)
-
-
-def parse_posicao(entrada):
-    entrada = entrada.strip().upper()
-    if len(entrada) < 2:
-        return None
-    letra = entrada[0]
-    if letra not in "ABCDEFGHIJ":
-        return None
-    try:
-        col = int(entrada[1:]) - 1
-    except ValueError:
-        return None
-    if not (0 <= col < TAMANHO):
-        return None
-    return ord(letra) - ord('A'), col
-
-
-# ── Ranking ───────────────────────────────────────
-
-def salvar_pontuacao(nome, pontuacao, venceu):
-    resultado = "VITORIA" if venceu else "DERROTA"
-    with open(ARQUIVO_RANKING, "a", encoding="utf-8") as f:
-        f.write(f"{pontuacao} | {resultado} | {nome}\n")
-
-
-def exibir_ranking():
-    print("\n=== RANKING ===")
-    if not os.path.exists(ARQUIVO_RANKING):
-        print("Nenhuma partida registrada.")
-        return
-    entradas = []
-    with open(ARQUIVO_RANKING, "r", encoding="utf-8") as f:
-        for linha in f:
-            partes = [p.strip() for p in linha.strip().split("|")]
-            if len(partes) == 3:
-                try:
-                    entradas.append((int(partes[0]), partes[1], partes[2]))
-                except ValueError:
-                    pass
-    entradas.sort(reverse=True)
-    for pos, (pts, res, nome) in enumerate(entradas[:10], 1):
-        print(f"  {pos}. {nome:<20} {pts:>6} pts  ({res})")
+        if ocultar:
+            linha = ['🌊' if celula == '🚢' else celula for celula in linha]
+        print(f"{i:2} " + " ".join(linha))
     print()
 
 
-# ── Jogo ──────────────────────────────────────────
+def posicao():
+    exibir_tabuleiro(tabuleiro_jogador)
+    time.sleep(1.5)
 
-def jogar(nome):
-    tabuleiro = criar_tabuleiro()
-    navios    = posicionar_navios(tabuleiro)
-    pontuacao = 0
-    turno     = 1
+    print('Tabuleiro do Jogador:')
+    print('Escolha a posição das suas 5 embarcações')
+    time.sleep(1.5)
 
-    print("\nNavios posicionados! Boa sorte!\n")
+    contador = 0
 
+    while contador < 5:
+        linha = int(input('Digite a linha (0-8): '))
+        coluna = int(input('Digite a coluna (0-8): '))
+        print()
+
+        if 0 <= linha < 9 and 0 <= coluna < 9:
+            if tabuleiro_jogador[linha][coluna] == '🌊':
+                tabuleiro_jogador[linha][coluna] = '🚢'
+                contador += 1
+                exibir_tabuleiro(tabuleiro_jogador)
+            else:
+                print('Posição ocupada. Tente novamente.')
+        else:
+            print('Fora dos limites.')
+
+
+def posicao_bot():
+    for _ in range(5):
+        while True:
+            linha = random.randint(0, 8)
+            coluna = random.randint(0, 8)
+
+            if tabuleiro_bot[linha][coluna] == '🌊':
+                tabuleiro_bot[linha][coluna] = '🚢'
+                break
+
+
+def ataque(estado):
     while True:
-        print(f"\n--- Turno {turno} | Pontuacao: {pontuacao} ---")
-        exibir_tabuleiro(tabuleiro, revelar=False)
+        linha = int(input('Digite a linha para atacar (0-8): '))
+        coluna = int(input('Digite a coluna para atacar (0-8): '))
+        print()
 
-        entrada = input("Ataque (ex: B5): ").strip()
-        pos = parse_posicao(entrada)
-        if pos is None:
-            print("Posicao invalida. Use letra A-J + numero 1-10.")
-            continue
+        if 0 <= linha < 9 and 0 <= coluna < 9:
+            if tabuleiro_bot[linha][coluna] == '🚢':
+                print('Acertou um navio!')
+                exibir_computador[linha][coluna] = '🔥'
+                estado['restante_bot'] -= 1
 
-        linha, col = pos
-        resultado, afundou = atacar(tabuleiro, navios, linha, col)
+            elif tabuleiro_bot[linha][coluna] == '🌊':
+                print('Água!')
+                exibir_computador[linha][coluna] = '⚫'
 
-        if resultado == 'ja_atacado':
-            print("Voce ja atacou essa posicao!")
-            continue
-        elif resultado == 'acerto':
-            pontuacao += 100
-            print(f"ACERTO! +100 pontos. Total: {pontuacao}")
-        elif resultado == 'afundou':
-            pontuacao += 300
-            print(f"AFUNDOU o {afundou}! +300 pontos. Total: {pontuacao}")
-        elif resultado == 'erro':
-            pontuacao -= 10
-            print(f"Agua... -10 pontos. Total: {pontuacao}")
+            else:
+                print('Você já atacou essa posição. Tente novamente.')
+                continue
 
-        if todos_afundados(navios):
-            pontuacao += 500
-            print(f"\nPARABENS {nome}! Voce destruiu toda a frota!")
-            print(f"Pontuacao final: {pontuacao}")
-            exibir_tabuleiro(tabuleiro, revelar=True)
-            salvar_pontuacao(nome, pontuacao, venceu=True)
-            return
-
-        turno += 1
-
-
-# ── Menu principal ────────────────────────────────
-
-def main():
-    print("=== BATALHA NAVAL ===")
-    nome = input("Digite seu nome: ").strip() or "Anonimo"
-
-    while True:
-        print("\n[1] Jogar")
-        print("[2] Ver Ranking")
-        print("[0] Sair")
-        escolha = input("Escolha: ").strip()
-
-        if escolha == '1':
-            jogar(nome)
-        elif escolha == '2':
-            exibir_ranking()
-        elif escolha == '0':
-            print("Ate logo!")
             break
         else:
-            print("Opcao invalida.")
+            print('Posição inválida. Tente novamente.')
 
 
-if __name__ == "__main__":
+def ataque_bot(estado):
+    while True:
+        linha = random.randint(0, 8)
+        coluna = random.randint(0, 8)
+
+        if tabuleiro_jogador[linha][coluna] == '🚢':
+            print('O computador acertou um navio!')
+            exibir_jogador[linha][coluna] = '🔥'
+            estado['restante_jogador'] -= 1
+            break
+
+        elif tabuleiro_jogador[linha][coluna] == '🌊':
+            print('O computador errou! Água!')
+            exibir_jogador[linha][coluna] = '⚫'
+            break
+
+
+def tabuleiro_lado(tab1, tab2, ocultar_tab2=False):
+    print("Tabuleiro do Jogador:" + " " * 25 + "Tabuleiro do Bot:")
+
+    cabecalho = "   " + " ".join(f"{i:2}" for i in range(9)) + " " * 6 + " ".join(f"{i:2}" for i in range(9))
+    print(cabecalho)
+
+    for i in range(9):
+        linha_tab1 = " ".join(tab1[i])
+
+        if ocultar_tab2:
+            linha_tab2 = " ".join('🌊' if celula == '🚢' else celula for celula in tab2[i])
+        else:
+            linha_tab2 = " ".join(tab2[i])
+
+        print(f"{i:2} {linha_tab1}     {i:2} {linha_tab2}")
+
+
+def verificar_vitoria(estado):
+    if estado['restante_bot'] == 0:
+        print('Parabéns! Você venceu!')
+        print()
+        print('Jogo desenvolvido por: Tiago Duarte')
+        return True
+
+    elif estado['restante_jogador'] == 0:
+        print('O computador venceu! Tente novamente.')
+        print()
+        print('Jogo desenvolvido por: Tiago Duarte')
+        return True
+    return False
+
+
+def main():
+    while True:
+        menu()
+
+
+if __name__ == '__main__':
     main()
