@@ -26,7 +26,12 @@ print(' ')
 print('Jogo Batalha Naval')
 print(' ')
 
+nome = input('Digite seu nome: ')
+
 def menu():
+    print('=====================================================')
+    print(f'Bem Vindo Ao Jogo {nome}')
+    print('=====================================================')
     print('1. Começar o jogo')
     print('2. Regras')
     print('3. Sair')
@@ -55,6 +60,7 @@ def menu():
         print('2. Cada jogador tem um tabuleiro de 9x9.')
         print('3. Os jogadores se revezam para atacar.')
         print('4. O primeiro a destruir todos os navios vence.')
+        print('=====================================================')
 
     elif escolha == '3':
         print('Saindo do jogo...')
